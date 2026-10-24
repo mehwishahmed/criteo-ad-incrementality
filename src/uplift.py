@@ -80,3 +80,28 @@ def adjusted_targeting_table(df: pd.DataFrame, uplift: np.ndarray, outcome: str,
                      "adjusted share of incremental captured": fit["coef"] * len(top) / total,
                      "random targeting share": f})
     return pd.DataFrame(rows).set_index("target top")
+
+
+def seed_stability(df: pd.DataFrame, features: list[str], outcome: str = "visit",
+                   seeds=(42, 43, 44, 45, 46), fractions=(0.1, 0.2, 0.3),
+                   treatment_col: str = "treatment") -> pd.DataFrame:
+    """Refit the T-learner with a different train/test split *and* XGBoost seed each time.
+
+    Returns one row per seed with the Qini AUC and targeting shares (standard Qini and
+    Lin-adjusted), so we can quote a mean and range instead of one split's numbers.
+    """
+    from sklift.metrics import qini_auc_score
+
+    rows = []
+    for s in seeds:
+        train, test = split(df, seed=s, treatment_col=treatment_col)
+        model = TLearner(random_state=s).fit(train[features], train[outcome], train[treatment_col])
+        up = model.predict(test[features])
+        qini = targeting_table(test[outcome], up, test[treatment_col], fractions)
+        adj = adjusted_targeting_table(test, up, outcome, features, fractions, treatment_col)
+        row = {"seed": s, "qini_auc": qini_auc_score(test[outcome], up, test[treatment_col])}
+        for f in fractions:
+            row[f"top{int(f * 100)}_qini"] = qini.loc[f, "share of incremental captured"]
+            row[f"top{int(f * 100)}_adjusted"] = adj.loc[f, "adjusted share of incremental captured"]
+        rows.append(row)
+    return pd.DataFrame(rows).set_index("seed")
