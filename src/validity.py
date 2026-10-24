@@ -53,3 +53,30 @@ def exposure_check(df: pd.DataFrame, treatment_col: str = "treatment",
     return (df.groupby(treatment_col)[exposure_col]
               .agg(n="size", n_exposed="sum", exposure_rate="mean")
               .rename(index={0: "control", 1: "treatment"}))
+
+
+def prognostic_balance(df: pd.DataFrame, features: list[str], outcome: str,
+                       treatment_col: str = "treatment") -> dict:
+    """Balance on a single 'prognostic score': the outcome predicted from features.
+
+    Fit outcome ~ features on control users only (so treatment can't leak in), predict
+    for everyone, and compare the mean prediction by arm. This folds all feature
+    imbalances into one number in outcome units: "how much higher would treatment's
+    outcome be from its features alone, with no ads?" Also reports the z-score of the
+    gap vs. what randomization alone would produce.
+    """
+    import statsmodels.api as sm
+
+    X = sm.add_constant(df[features].astype("float64"))
+    is_c = df[treatment_col] == 0
+    fit = sm.OLS(df.loc[is_c, outcome].astype("float64"), X[is_c]).fit()
+    score = fit.predict(X)
+    m_t, m_c = score[~is_c].mean(), score[is_c].mean()
+    se = np.sqrt(score[~is_c].var() / (~is_c).sum() + score[is_c].var() / is_c.sum())
+    return {"pred_treatment": m_t, "pred_control": m_c, "gap": m_t - m_c,
+            "smd": (m_t - m_c) / score.std(), "z": (m_t - m_c) / se}
+
+
+def smd_z_scores(smd: pd.DataFrame, n_treatment: int, n_control: int) -> pd.Series:
+    """SMD divided by its standard error under pure randomization, sqrt(1/nT + 1/nC)."""
+    return smd.set_index("feature")["smd"] / np.sqrt(1 / n_treatment + 1 / n_control)
