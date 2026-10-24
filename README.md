@@ -15,7 +15,9 @@ targeting the top 30% of users by predicted uplift captures about **80%** of inc
 | Share of incremental visits from top 10% / 20% / 30% of users | 55.4% / 72.3% / 80.2% | 5-seed ranges: 50.7–57.7% / 68.6–76.2% / 77.6–85.0% |
 
 <sub>pp = percentage points. Regression adjustment uses Lin (2013) with treatment × covariate interactions and HC1
-standard errors. Targeting shares are standard Qini shares on held-out users, averaged over 5 seeds (42–46).</sub>
+standard errors. Each relative lift divides by the no-ad visit rate for the same population as its effect: 4.022%
+for the adjusted lift (the control model applied to all users), 3.818% (raw control rate) for the unadjusted one.
+Targeting shares are standard Qini shares on held-out users, averaged over 5 seeds (42–46).</sub>
 
 ![Qini curve: the uplift model's ranking captures incremental visits far faster than random targeting](figures/04_qini_curve.png)
 
@@ -35,6 +37,9 @@ cutoff should come from ad-cost data, which this dataset doesn't include.
 ### 1. Results
 - **Visits:** ads raised the visit rate by **0.812 pp, or +20.2%** (95% CI [0.730, 0.893] pp), after regression adjustment.
   The unadjusted comparison is 3.818% → 4.885% (+27.9%), which overstates the effect (see section 2).
+- **Which baseline:** the 20.2% divides by 4.022%, the predicted no-ad visit rate for the full sample. The adjusted effect
+  averages over all users, so its baseline must too. Dividing by the raw control rate (3.818%) would give 21.3%, but it
+  mixes populations: control users are slightly lighter visitors than the full sample, the same imbalance as in section 2.
 - **Conversions** (secondary metric): +0.104 pp, or +49.0% (95% CI [0.082, 0.125] pp), adjusted. Conversions are
   19.4x rarer than visits in the control group, which is why visit is the primary metric. The minimum detectable effect is a 3.4% relative
   lift for visits but 15.5% for conversions.
