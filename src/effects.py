@@ -97,3 +97,43 @@ def bootstrap_lift(df: pd.DataFrame, outcome: str, n_boot: int = 1000,
         "rel_ci_high": np.percentile(rel_lift, 97.5),
         "share_boot_lift_le_0": float((abs_lift <= 0).mean()),
     }
+
+
+def _p_from_cohens_h(p_base: float, h: float) -> float:
+    """Invert Cohen's h = 2*asin(sqrt(p1)) - 2*asin(sqrt(p0)) for p1."""
+    return np.sin(np.arcsin(np.sqrt(p_base)) + h / 2) ** 2
+
+
+def mde_two_proportions(p_control: float, n_treatment: int, n_control: int,
+                        alpha: float = 0.05, power: float = 0.80) -> dict:
+    """Minimum detectable effect for a two-sided two-proportion test.
+
+    statsmodels solves for the smallest Cohen's h detectable with the given
+    sample sizes; we convert h back to a treatment rate to express the MDE in
+    percentage points and as a relative lift over the control rate.
+    """
+    from statsmodels.stats.power import NormalIndPower
+
+    h = NormalIndPower().solve_power(effect_size=None, nobs1=n_treatment,
+                                     ratio=n_control / n_treatment,
+                                     alpha=alpha, power=power, alternative="two-sided")
+    p_t = _p_from_cohens_h(p_control, h)
+    return {
+        "control_rate": p_control,
+        "cohens_h": h,
+        "mde_abs": p_t - p_control,
+        "mde_rel": p_t / p_control - 1,
+    }
+
+
+def required_total_n(p_control: float, rel_lift: float, treat_share: float = 0.85,
+                     alpha: float = 0.05, power: float = 0.80) -> int:
+    """Total users needed (at the given split) to detect a relative lift with the given power."""
+    from statsmodels.stats.power import NormalIndPower
+    from statsmodels.stats.proportion import proportion_effectsize
+
+    h = proportion_effectsize(p_control * (1 + rel_lift), p_control)
+    ratio = (1 - treat_share) / treat_share
+    n_t = NormalIndPower().solve_power(effect_size=h, nobs1=None, ratio=ratio,
+                                       alpha=alpha, power=power, alternative="two-sided")
+    return int(np.ceil(n_t * (1 + ratio)))
