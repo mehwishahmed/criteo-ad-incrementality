@@ -221,3 +221,6 @@ __marimo__/
 
 # Project data (downloaded / derived, too large for git)
 data/
+
+# Personal project notes, not for the public repo
+PROJECT_SPEC.md
