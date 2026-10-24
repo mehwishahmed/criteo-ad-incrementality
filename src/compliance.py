@@ -71,3 +71,37 @@ def complier_means(df: pd.DataFrame, outcome: str, treatment_col: str = "treatme
     y0_c = (df.loc[~t, outcome].mean() - (1 - pi) * y_never) / pi
     return {"complier_share": pi, "compliers_with_ads": y1_c, "compliers_without_ads": y0_c,
             "never_takers": y_never, "naive_exposed_vs_unexposed": y1_c - y_never}
+
+
+def adjusted_complier_means(df: pd.DataFrame, outcome: str, covariates: list[str],
+                            treatment_col: str = "treatment", exposure_col: str = "exposure") -> dict:
+    """Complier decomposition with every piece Lin-adjusted to the same covariate mix.
+
+    Each arm's adjusted mean of a quantity W is read off a Lin regression of W on
+    treatment: control = intercept, treatment = intercept + coefficient, both evaluated
+    at the full sample's average features. Using that for W = exposure, Y*exposure and
+    Y*(1 - exposure) gives
+        pi             = adjusted exposure share in treatment (minus 0 in control)
+        E[Y1 | C]      = adj. mean of Y*D in treatment / pi
+        E[Y0 | NT]     = adj. mean of Y*(1-D) in treatment / (1 - pi)
+        E[Y0 | C]      = (adj. control mean of Y - adj. mean of Y*(1-D) in treatment) / pi
+    By linearity of OLS, E[Y1|C] - E[Y0|C] equals the adjusted CACE exactly, so the
+    baseline and the effect come from one consistent model.
+    """
+    w = df.assign(_yd=df[outcome] * df[exposure_col],
+                  _ynd=df[outcome] * (1 - df[exposure_col]))
+
+    def arm_means(col):
+        r = treatment_ols(w, col, covariates, interact=True, treatment_col=treatment_col)
+        return r["control_baseline"], r["control_baseline"] + r["coef"]
+
+    d_c, d_t = arm_means(exposure_col)
+    pi = d_t - d_c
+    y_c, _ = arm_means(outcome)
+    _, yd_t = arm_means("_yd")
+    _, ynd_t = arm_means("_ynd")
+
+    y1_c = yd_t / pi
+    y0_c = (y_c - ynd_t) / pi
+    return {"complier_share": pi, "compliers_with_ads": y1_c, "compliers_without_ads": y0_c,
+            "never_takers": ynd_t / (1 - pi), "cace": y1_c - y0_c, "cace_relative": y1_c / y0_c - 1}
